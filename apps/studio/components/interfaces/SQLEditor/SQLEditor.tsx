@@ -1,6 +1,5 @@
 import type { Monaco } from '@monaco-editor/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useChat } from 'ai/react'
 import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -22,10 +21,11 @@ import { useOrgSubscriptionQuery } from 'data/subscriptions/org-subscription-que
 import { isError } from 'data/utils/error-check'
 import { useLocalStorageQuery } from 'hooks/misc/useLocalStorage'
 import { useOrgOptedIntoAi } from 'hooks/misc/useOrgOptedIntoAi'
+import { useSchemasForAi } from 'hooks/misc/useSchemasForAi'
 import { useSelectedOrganization } from 'hooks/misc/useSelectedOrganization'
 import { useSelectedProject } from 'hooks/misc/useSelectedProject'
 import { useFlag } from 'hooks/ui/useFlag'
-import { BASE_PATH, IS_PLATFORM, LOCAL_STORAGE_KEYS } from 'lib/constants'
+import { IS_PLATFORM, LOCAL_STORAGE_KEYS } from 'lib/constants'
 import { uuidv4 } from 'lib/helpers'
 import { useProfile } from 'lib/profile'
 import { wrapWithRoleImpersonation } from 'lib/role-impersonation'
@@ -121,20 +121,19 @@ const SQLEditor = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
 
   const isOptedInToAI = useOrgOptedIntoAi()
-  const [hasEnabledAISchema] = useLocalStorageQuery(LOCAL_STORAGE_KEYS.SQL_EDITOR_AI_SCHEMA, true)
-  const includeSchemaMetadata = (isOptedInToAI || !IS_PLATFORM) && hasEnabledAISchema
+  const [selectedSchemas] = useSchemasForAi(project?.ref!)
+  const includeSchemaMetadata = isOptedInToAI || !IS_PLATFORM
 
   const [isAcceptDiffLoading, setIsAcceptDiffLoading] = useState(false)
   const [, setAiQueryCount] = useLocalStorageQuery('supabase_sql-editor-ai-query-count', 0)
 
-  // Use chat id because useChat doesn't have a reset function to clear all messages
-  const [chatId, setChatId] = useState(uuidv4())
   const [selectedDiffType, setSelectedDiffType] = useState<DiffType | undefined>(undefined)
   const [isFirstRender, setIsFirstRender] = useState(true)
   const [lineHighlights, setLineHighlights] = useState<string[]>([])
 
   const { data, refetch: refetchEntityDefinitions } = useEntityDefinitionsQuery(
     {
+      schemas: selectedSchemas,
       projectRef: project?.ref,
       connectionString: project?.connectionString,
     },
@@ -144,33 +143,11 @@ const SQLEditor = () => {
   const entityDefinitions = includeSchemaMetadata ? data?.map((def) => def.sql.trim()) : undefined
   const isDiffOpen = !!sourceSqlDiff
 
+  const limit = enableFolders ? snapV2.limit : snap.limit
   const snippetIsLoading = enableFolders
     ? !(id in snapV2.snippets && snapV2.snippets[id].snippet.content !== undefined)
     : !(id && ref && snap.loaded[ref])
   const isLoading = urlId === 'new' ? false : snippetIsLoading
-
-  const {
-    messages: chatMessages,
-    append,
-    isLoading: isLoadingChat,
-  } = useChat({
-    id: chatId,
-    api: `${BASE_PATH}/api/ai/sql/generate-v2`,
-    body: {
-      existingSql: editorRef.current?.getValue(),
-      entityDefinitions: isOptedInToAI ? entityDefinitions : undefined,
-    },
-  })
-
-  const messages = useMemo(() => {
-    const merged = [...chatMessages.map((m) => ({ ...m, isDebug: false }))]
-
-    return merged.sort(
-      (a, b) =>
-        (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0) ||
-        a.role.localeCompare(b.role)
-    )
-  }, [chatMessages])
 
   const { mutate: execute, isLoading: isExecuting } = useExecuteSqlMutation({
     onSuccess(data, vars) {
@@ -321,8 +298,8 @@ const SQLEditor = () => {
           return toast.error('Unable to run query: Connection string is missing')
         }
 
-        const { appendAutoLimit } = checkIfAppendLimitRequired(sql, snap.limit)
-        const formattedSql = suffixWithLimit(sql, snap.limit)
+        const { appendAutoLimit } = checkIfAppendLimitRequired(sql, limit)
+        const formattedSql = suffixWithLimit(sql, limit)
 
         execute({
           projectRef: project.ref,
@@ -331,7 +308,7 @@ const SQLEditor = () => {
             projectRef: project.ref,
             role: impersonatedRole,
           }),
-          autoLimit: appendAutoLimit ? snap.limit : undefined,
+          autoLimit: appendAutoLimit ? limit : undefined,
           isRoleImpersonationEnabled: isRoleImpersonationEnabled(impersonatedRole),
           handleError: (error) => {
             throw error
@@ -350,6 +327,7 @@ const SQLEditor = () => {
       setAiTitle,
       databaseSelectorState.selectedDatabaseId,
       databases,
+      limit,
     ]
   )
 
@@ -657,7 +635,7 @@ const SQLEditor = () => {
                   appSnap.setShowAiSettingsModal(true)
                 }}
               >
-                {isDiffOpen ? (
+                {isDiffOpen && (
                   <motion.div
                     key="ask-ai-input-container"
                     layoutId="ask-ai-input-container"
@@ -682,7 +660,7 @@ const SQLEditor = () => {
                       onCancel={discardAiHandler}
                     />
                   </motion.div>
-                ) : null}
+                )}
               </AISchemaSuggestionPopover>
             )}
             <ResizablePanel collapsible collapsedSize={10} minSize={20}>
@@ -783,17 +761,9 @@ const SQLEditor = () => {
           onExpand={() => setIsAiOpen(true)}
         >
           <AiAssistantPanel
-            messages={messages}
             selectedMessage={selectedMessage}
-            loading={isLoadingChat}
-            onSubmit={(message) =>
-              append({
-                content: message,
-                role: 'user',
-                createdAt: new Date(),
-              })
-            }
-            onClearHistory={() => setChatId(uuidv4())}
+            existingSql={editorRef.current?.getValue() || ''}
+            includeSchemaMetadata={includeSchemaMetadata}
             onDiff={updateEditorWithCheckForDiff}
             onClose={() => aiPanelRef.current?.collapse()}
           />

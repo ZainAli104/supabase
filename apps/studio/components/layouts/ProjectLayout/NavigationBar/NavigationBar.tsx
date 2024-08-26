@@ -176,7 +176,7 @@ const NavigationBar = () => {
               )
             } else if (route.key === 'advisors') {
               return (
-                <div className="relative">
+                <div className="relative" key={route.key}>
                   {securityLints.length > 0 && (
                     <div
                       className={cn(
@@ -187,7 +187,6 @@ const NavigationBar = () => {
                   )}
 
                   <NavigationIconLink
-                    key={route.key}
                     route={route}
                     isActive={activeRoute === route.key}
                     onClick={onCloseNavigationIconLink}
@@ -342,7 +341,7 @@ const NavigationBar = () => {
                   <DropdownMenuGroup>
                     <DropdownMenuItem className="flex gap-2" asChild>
                       <Link href="/account/me">
-                        <Settings size={14} strokeWidth={1.5} className="text-foreground-muted" />
+                        <Settings size={14} strokeWidth={1.5} className="text-foreground-lighter" />
                         Account preferences
                       </Link>
                     </DropdownMenuItem>
@@ -351,7 +350,11 @@ const NavigationBar = () => {
                       onClick={() => snap.setShowFeaturePreviewModal(true)}
                       onSelect={() => snap.setShowFeaturePreviewModal(true)}
                     >
-                      <FlaskConical size={14} strokeWidth={1.5} className="text-foreground-muted" />
+                      <FlaskConical
+                        size={14}
+                        strokeWidth={1.5}
+                        className="text-foreground-lighter"
+                      />
                       Feature previews
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
