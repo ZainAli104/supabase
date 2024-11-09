@@ -15,7 +15,7 @@ import { useUserResetPasswordMutation } from 'data/auth/user-reset-password-muta
 import { useUserSendMagicLinkMutation } from 'data/auth/user-send-magic-link-mutation'
 import { useUserSendOTPMutation } from 'data/auth/user-send-otp-mutation'
 import { useUserUpdateMutation } from 'data/auth/user-update-mutation'
-import { User } from 'data/auth/users-query'
+import { User } from 'data/auth/users-infinite-query'
 import { getAPIKeys, useProjectSettingsV2Query } from 'data/config/project-settings-v2-query'
 import { useCheckPermissions } from 'hooks/misc/useCheckPermissions'
 import { BASE_PATH } from 'lib/constants'
@@ -149,7 +149,8 @@ export const UserOverview = ({ user, onDeleteSuccess }: UserOverviewProps) => {
       return toast.error(`Failed to ban user: User ID not found`)
     }
 
-    const endpoint = settings.app_config?.endpoint
+    const protocol = settings?.app_config?.protocol ?? 'https'
+    const endpoint = settings?.app_config?.endpoint
     const { serviceKey } = getAPIKeys(settings)
 
     if (!endpoint) return toast.error(`Failed to unban user: Unable to retrieve API endpoint`)
@@ -157,7 +158,7 @@ export const UserOverview = ({ user, onDeleteSuccess }: UserOverviewProps) => {
 
     updateUser({
       projectRef,
-      protocol: 'https',
+      protocol,
       endpoint,
       serviceApiKey: serviceKey.api_key,
       userId: user.id,
@@ -464,7 +465,7 @@ export const UserOverview = ({ user, onDeleteSuccess }: UserOverviewProps) => {
   )
 }
 
-const RowData = ({ property, value }: { property: string; value?: string | boolean }) => {
+export const RowData = ({ property, value }: { property: string; value?: string | boolean }) => {
   return (
     <div className="flex items-center gap-x-2 group">
       <p className="w-36 text-foreground-light text-sm">{property}</p>
@@ -498,7 +499,7 @@ const RowData = ({ property, value }: { property: string; value?: string | boole
   )
 }
 
-const RowAction = ({
+export const RowAction = ({
   title,
   description,
   button,
